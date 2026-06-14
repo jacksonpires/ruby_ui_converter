@@ -1,0 +1,19 @@
+CHANGELOG.md
+  s_3e880c9f844a57::t_5ba73e4420620c 3,5-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "f71e9ef3a3741c5c9e15a8df7f19142add4251e3",
+  "prompts": {},
+  "sessions": {
+    "s_3e880c9f844a57": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9af10022-63aa-4f84-96d5-b72352b14883",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jackson Pires <jackson.pires@gmail.com>"
+    }
+  }
+}
