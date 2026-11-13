@@ -60,6 +60,10 @@ module RubyUIConverter
     end
 
     def model_expression(header)
+      # Drop the block opener first so an unparenthesized call
+      # (`form_with model: @product do |form|`) doesn't capture `do |form|`.
+      header = header.sub(/\s*\bdo\s*(\|[^|]*\|)?\s*\z/, "")
+
       if (model = header[/\bmodel:\s*([^,)]+)/, 1])
         return model.strip
       end

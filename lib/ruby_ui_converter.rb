@@ -8,6 +8,9 @@ require_relative "ruby_ui_converter/nodes"
 require_relative "ruby_ui_converter/lexer"
 require_relative "ruby_ui_converter/html_tokenizer"
 require_relative "ruby_ui_converter/parser"
+require_relative "ruby_ui_converter/ruby_literal"
+require_relative "ruby_ui_converter/haml_attributes"
+require_relative "ruby_ui_converter/haml_parser"
 require_relative "ruby_ui_converter/code_builder"
 require_relative "ruby_ui_converter/naming"
 require_relative "ruby_ui_converter/rails_helpers"
@@ -24,13 +27,35 @@ require_relative "ruby_ui_converter/doctor"
 module RubyUIConverter
   class Error < StandardError; end
 
-  # Convert a single .erb string into Ruby/Phlex source (no file IO).
+  # Template file extension -> source format (front-end parser).
+  FORMATS = { ".erb" => :erb, ".haml" => :haml }.freeze
+
+  # The source format of a template path ("index.html.haml" -> :haml), or
+  # nil when it isn't a supported template.
+  def self.format_for(path)
+    FORMATS[File.extname(path.to_s)]
+  end
+
+  # Parse template source into the shared AST (Nodes::Document). This is the
+  # single dispatch point between the front-ends: ERB (Lexer + HtmlTokenizer
+  # + Parser) and HAML (HamlParser, backed by the optional haml gem).
+  def self.parse(source, format: :erb)
+    case format.to_sym
+    when :erb then Parser.new(source).parse
+    when :haml then HamlParser.new(source).parse
+    else raise Error, "unsupported template format: #{format.inspect}"
+    end
+  end
+
+  # Convert a single .erb (or, with format: :haml, .haml) string into
+  # Ruby/Phlex source (no file IO).
   #
   #   RubyUIConverter.convert_string("<h1><%= @title %></h1>")
+  #   RubyUIConverter.convert_string("%h1= @title", format: :haml)
   def self.convert_string(source, class_name: "Component", base_namespace: "",
-                          base_class: "Phlex::HTML", **opts)
+                          base_class: "Phlex::HTML", format: :erb, **opts)
     config = Configuration.new(base_namespace: base_namespace, base_class: base_class, **opts)
-    document = Parser.new(source).parse
+    document = parse(source, format: format)
     builder = CodeBuilder.new(indent: config.indent)
     builder.line("class #{class_name} < #{config.base_class}")
     builder.indent

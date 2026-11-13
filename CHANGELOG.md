@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+- **HAML support**: `.haml` views and partials are converted alongside `.erb`
+  (`convert app/views` picks up both; `convert_string(..., format: :haml)`).
+  A new front-end (`HamlParser`) uses the haml gem's own parser — an
+  *optional* dependency, required lazily, supporting haml 5.2/6.x/7.x — and
+  builds the same AST as the ERB front-end, so RubyUI mapping, `link_to`/
+  `render`, form-builder mapping, locals/ivars detection and `--literal`
+  apply unchanged. Covers tags/shorthand, `=`/`!=`/`&=`, control flow and
+  blocks, interpolated text (parsed as HTML, so inline markup and
+  `#{link_to ...}` convert too), attribute merging (`class`/`id`, literal
+  `data:`/`aria:` hashes, booleans, `[@obj]` → `dom_id`/`dom_class`, splats),
+  comments (`/` with nested content → `comment do … end`), doctype and the
+  `:javascript`/`:css`/`:plain`/`:escaped`/`:erb`/`:ruby` filters. Without
+  the haml gem, the CLI explains once how to add it.
+- The end-to-end check also scaffolds a resource with haml-rails and renders
+  its converted HAML views.
+- Two templates generating the same `.rb` (`show.html.erb` + `show.html.haml`,
+  or a `+variant`) are now reported as an error instead of being skipped or
+  overwritten.
+- Fix: `form_with model: @x do |form|` (unparenthesized) now activates the
+  form-builder mapping (the model capture swallowed `do |form|`).
+- Fix: a same-line space between inline siblings (`<em>a</em> <%= b %>`) is
+  kept as Phlex `whitespace` instead of being dropped.
+- Attribute expressions that are already self-delimited (`[a, b]`, `{...}`,
+  `dom_id(user, :row)`) are no longer wrapped in parentheses.
+
 - Compatibility matrix in the README and in CI: unit tests on Ruby 3.0–4.0
   (plus `ruby-head`), and an end-to-end check (`script/rails_e2e/run.sh`) that
   scaffolds, converts and renders a fresh Rails 7.1/7.2/8.0/8.1 app on

@@ -31,10 +31,10 @@ module RubyUIConverter
     end
 
     def meaningful(nodes)
-      nodes.reject do |node|
-        (node.is_a?(Nodes::Text) && node.content.strip.empty?) ||
+      nodes.each_with_index.reject do |node, index|
+        (node.is_a?(Nodes::Text) && node.content.strip.empty? && !inline_space?(nodes, index)) ||
           (node.is_a?(Nodes::RawText) && node.content.strip.empty?)
-      end
+      end.map(&:first)
     end
 
     def render_attrs(attributes, except: [])
@@ -156,6 +156,7 @@ module RubyUIConverter
       # Collapse runs of whitespace to a single space but keep meaningful
       # leading/trailing spaces so inline text ("Hello, ") stays readable.
       content = node.content.gsub(/\s+/, " ")
+      return builder.line("whitespace") if content == " " # see #inline_space?
       return if content.strip.empty?
 
       builder.line("plain #{ruby_string(content)}")
@@ -228,14 +229,22 @@ module RubyUIConverter
         case node
         when Nodes::Output, Nodes::Statement then acc << node.code
         when Nodes::Control then node.branches.each { |b| collect_codes(b.children, acc) }
-        when Nodes::Element then collect_codes(node.children, acc)
+        when Nodes::Element, Nodes::Comment then collect_codes(node.children, acc)
         end
       end
       acc
     end
 
     def emit_comment(node, builder)
-      if node.html
+      if node.html && meaningful(node.children).any?
+        builder.line("comment do")
+        builder.indent
+        text = node.text.strip
+        builder.line("plain #{ruby_string(text)}") unless text.empty?
+        emit_children(meaningful(node.children), builder)
+        builder.dedent
+        builder.line("end")
+      elsif node.html
         text = node.text.strip
         builder.line("comment { #{ruby_string(text)} }") unless text.empty?
       else
@@ -276,8 +285,43 @@ module RubyUIConverter
 
     # Expressions with whitespace (`dom_id user`, `a ? b : c`) would parse
     # incorrectly inside the attribute argument list, so wrap them in parens.
+    # Self-delimited expressions (`[a, b]`, `{a: 1}`, `dom_id(user, :x)`) are
+    # safe as-is.
     def bare_expression(code)
-      code =~ /\s/ ? "(#{code})" : code
+      return code unless code =~ /\s/
+
+      self_delimited?(code) ? code : "(#{code})"
+    end
+
+    GROUP_TOKENS = {
+      on_lparen: 1, on_lbracket: 1, on_lbrace: 1,
+      on_rparen: -1, on_rbracket: -1, on_rbrace: -1
+    }.freeze
+    CALL_PREFIX_TOKENS = %i[on_ident on_const on_ivar on_cvar on_gvar on_period].freeze
+
+    # True when the code is a bracketed literal or a parenthesized call
+    # (optionally on a receiver chain written without spaces) whose opening
+    # bracket closes exactly at the end of the code.
+    def self_delimited?(code)
+      tokens = Ripper.lex(code)
+      index = 0
+      while index < tokens.length &&
+            (CALL_PREFIX_TOKENS.include?(tokens[index][1]) ||
+             (tokens[index][1] == :on_op && ["::", "&."].include?(tokens[index][2])))
+        index += 1
+      end
+      return false if index.positive? && !%i[on_ident on_const].include?(tokens[index - 1][1])
+      return false unless tokens[index] && GROUP_TOKENS[tokens[index][1]] == 1
+      return false if index.positive? && tokens[index][1] != :on_lparen
+
+      depth = 0
+      tokens[index..].each_with_index do |token, offset|
+        depth += GROUP_TOKENS.fetch(token[1], 0)
+        return index + offset == tokens.length - 1 if depth.zero?
+      end
+      false
+    rescue StandardError
+      false
     end
 
     def interpolated(parts)
@@ -297,6 +341,15 @@ module RubyUIConverter
 
     def element_method(name)
       name.to_s.downcase
+    end
+
+    # A whitespace-only text node on a single line between two siblings
+    # (`<em>a</em> <%= b %>`) separates inline content and is kept (emitted as
+    # Phlex's `whitespace`); whitespace spanning lines between tags is layout
+    # and is dropped.
+    def inline_space?(nodes, index)
+      content = nodes[index].content
+      !content.empty? && !content.include?("\n") && index.positive? && index < nodes.length - 1
     end
 
     def inlineable?(node)

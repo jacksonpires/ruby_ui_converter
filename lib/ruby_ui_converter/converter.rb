@@ -32,7 +32,12 @@ module RubyUIConverter
     end
 
     def run
-      FileWalker.new(@path).erb_files.map { |file| convert_file(file) }
+      # output path -> source that claimed it in this run. Two templates of the
+      # same action (show.html.erb + show.html.haml, or a variant like
+      # show.html+phone.erb) map to the same .rb; the later one is reported as
+      # an error instead of silently skipping or overwriting the first.
+      @claimed = {}
+      FileWalker.new(@path).template_files.map { |file| convert_file(file) }
     end
 
     private
@@ -55,8 +60,16 @@ module RubyUIConverter
     def convert_file(file)
       file = File.expand_path(file)
       template = Template.new(path: file, root: root, config: @config)
-      code = template.render
       output = template.output_path
+
+      if (other = @claimed[output])
+        error = Error.new("#{File.basename(output)} is also generated from #{File.basename(other)}; " \
+                          "convert one of them (or remove the other) to avoid a clash")
+        return Result.new(source: file, output: output, status: :error, error: error)
+      end
+
+      @claimed[output] = file
+      code = template.render
 
       if @config.dry_run
         return Result.new(source: file, output: output, status: :previewed, code: code)

@@ -39,6 +39,20 @@ class TransformerTest < Minitest::Test
     assert_includes out, %(div(id: (dom_id user), class: "row"))
   end
 
+  def test_leaves_self_delimited_attribute_expressions_unwrapped
+    assert_includes convert(%(<p id="<%= dom_id(user, :row) %>">x</p>)), "p(id: dom_id(user, :row))"
+    assert_includes convert(%(<p class="<%= [a, b] %>">x</p>)), "p(class: [a, b])"
+    assert_includes convert(%(<p class="<%= [a, b].join(" ") %>">x</p>)), %(p(class: ([a, b].join(" "))))
+    assert_includes convert(%(<p class="<%= foo(a) + b %>">x</p>)), "p(class: (foo(a) + b))"
+  end
+
+  def test_keeps_same_line_spaces_between_inline_siblings_and_drops_layout_newlines
+    out = convert(%(<td>\n  <span>a</span> <%= b %>\n</td>\n<p>x</p>), ruby_ui: false)
+
+    assert_includes out, %(span { "a" }\n      whitespace\n      plain(b))
+    refute_match(/whitespace\n\s*p \{/, out)
+  end
+
   def test_converts_if_else_into_ruby_control_flow
     out = convert("<% if a %><p>x</p><% else %><p>y</p><% end %>")
     assert_includes out, "if a"

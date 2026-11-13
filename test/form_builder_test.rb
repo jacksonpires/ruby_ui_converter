@@ -16,6 +16,13 @@ class FormBuilderTest < Minitest::Test
                     %(Input(name: "product[name]", id: "product[name]", value: product.name.to_s))
   end
 
+  def test_maps_fields_of_an_unparenthesized_form_with
+    out = convert(%(<%= form_with model: @product do |form| %><%= form.text_field :name %><% end %>))
+
+    assert_includes out, "form_with model: @product do\n"
+    assert_includes out, %(Input(name: "product[name]", id: "product[name]", value: @product.name.to_s))
+  end
+
   def test_adds_the_matching_type_for_typed_fields
     assert_includes form("<%= form.email_field :email %>"),
                     %(Input(type: "email", name: "product[email]", id: "product[email]", value: product.email.to_s))

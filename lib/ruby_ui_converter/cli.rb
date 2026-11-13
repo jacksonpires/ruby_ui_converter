@@ -8,11 +8,12 @@ module RubyUIConverter
       true
     end
 
-    desc "convert PATH", "Convert .erb views/partials under PATH into RubyUI/Phlex .rb files"
+    desc "convert PATH", "Convert .erb/.haml views/partials under PATH into RubyUI/Phlex .rb files"
     long_desc <<~DESC
-      Recursively walks PATH looking for *.erb files and writes an equivalent
-      .rb component next to each one (e.g. index.html.erb -> index.rb). Rails
-      partials (_form.html.erb) become their own component classes (form.rb).
+      Recursively walks PATH looking for *.erb and *.haml files and writes an
+      equivalent .rb component next to each one (e.g. index.html.erb ->
+      index.rb). Rails partials (_form.html.haml) become their own component
+      classes (form.rb). Converting .haml requires the haml gem to be loadable.
 
       By default, basic HTML elements are mapped onto RubyUI kit components
       (a -> Link, button -> Button, input -> Input, table -> Table, ...).
@@ -71,7 +72,7 @@ module RubyUIConverter
 
     def report(results, config)
       if results.empty?
-        say "No .erb files found.", :yellow
+        say "No .erb or .haml files found.", :yellow
         return
       end
 
@@ -86,13 +87,28 @@ module RubyUIConverter
         when :skipped
           say "  skipped  #{relative(result.output)} (exists, use --force)", :yellow
         when :error
-          say "  error    #{relative(result.source)}: #{result.error.message}", :red
+          if missing_haml?(result)
+            say "  error    #{relative(result.source)}: haml gem not available", :red
+          else
+            say "  error    #{relative(result.source)}: #{result.error.message}", :red
+          end
         end
       end
 
       counts = results.group_by(&:status).transform_values(&:size)
       say ""
       say "Done. #{counts.map { |status, n| "#{n} #{status}" }.join(", ")}."
+
+      # Every .haml file fails the same way without the gem: explain it once.
+      return unless results.any? { |result| missing_haml?(result) }
+
+      say ""
+      say "Note: #{HamlParser::MISSING_HAML}, then run the converter again " \
+          "(inside your app, `bundle exec ruby_ui_converter ...`).", :yellow
+    end
+
+    def missing_haml?(result)
+      result.status == :error && result.error&.message == HamlParser::MISSING_HAML
     end
 
     def preview(result)

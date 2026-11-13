@@ -180,6 +180,80 @@ class ConverterTest < Minitest::Test
     end
   end
 
+  def test_converts_haml_views_and_partials
+    Dir.mktmpdir("ruc") do |dir|
+      write(dir, "app/views/users/index.html.haml", <<~HAML)
+        %h1= @title
+        - @users.each do |user|
+          = render "user", user: user
+      HAML
+      write(dir, "app/views/users/_user.html.haml", <<~HAML)
+        %li{id: dom_id(user)}
+          %strong= user.name
+          joined \#{time_ago_in_words(user.created_at)} ago by \#{inviter.name}
+      HAML
+
+      results = RubyUIConverter::Converter.new(File.join(dir, "app/views/users")).run
+      assert_equal %i[written written], results.map(&:status)
+
+      index_path = File.join(dir, "app/views/users/index.rb")
+      index = File.read(index_path)
+      assert_includes index, "# Source: users/index.html.haml"
+      assert_includes index, "class Index < Phlex::HTML"
+      assert_includes index, "def initialize(title: nil, users: nil)"
+      assert_includes index, "render Views::Users::User.new(user: user)"
+
+      partial_path = File.join(dir, "app/views/users/user.rb")
+      partial = File.read(partial_path)
+      assert_includes partial, "class User < Phlex::HTML"
+      assert_includes partial, "def initialize(inviter: nil, user: nil)"
+      assert_includes partial, "attr_reader :inviter, :user"
+
+      [index_path, partial_path].each do |out|
+        assert system("ruby", "-c", out, out: File::NULL, err: File::NULL), "invalid Ruby: #{out}"
+      end
+    end
+  end
+
+  def test_converts_erb_and_haml_side_by_side_and_accepts_a_single_haml_file
+    Dir.mktmpdir("ruc") do |dir|
+      write(dir, "app/views/pages/about.html.erb", "<p>about</p>")
+      haml = write(dir, "app/views/pages/contact.html.haml", "%p contact")
+
+      results = RubyUIConverter::Converter.new(File.join(dir, "app/views/pages")).run
+      assert_equal %w[about.rb contact.rb], results.map { |r| File.basename(r.output) }
+
+      single = RubyUIConverter::Converter.new(haml, config: RubyUIConverter::Configuration.new(force: true)).run
+      assert_equal [:written], single.map(&:status)
+    end
+  end
+
+  def test_reports_templates_that_would_generate_the_same_file_as_a_clash
+    Dir.mktmpdir("ruc") do |dir|
+      write(dir, "app/views/users/show.html.erb", "<p>erb</p>")
+      write(dir, "app/views/users/show.html.haml", "%p haml")
+      config = RubyUIConverter::Configuration.new(force: true)
+
+      results = RubyUIConverter::Converter.new(File.join(dir, "app/views/users"), config: config).run
+
+      assert_equal %i[written error], results.map(&:status)
+      assert_includes results[1].error.message, "show.rb is also generated from show.html.erb"
+      assert_includes File.read(File.join(dir, "app/views/users/show.rb")), %(p { "erb" })
+    end
+  end
+
+  def test_reports_a_haml_syntax_error_as_a_per_file_error
+    Dir.mktmpdir("ruc") do |dir|
+      write(dir, "views/x/bad.html.haml", "%p Hi\n  %span nested under inline content\n")
+      write(dir, "views/x/good.html.erb", "<p>ok</p>")
+
+      results = RubyUIConverter::Converter.new(File.join(dir, "views")).run.sort_by(&:source)
+
+      assert_equal :error, results[0].status
+      assert_equal :written, results[1].status
+    end
+  end
+
   def test_maps_elements_to_rubyui_components_end_to_end
     Dir.mktmpdir("ruc") do |dir|
       path = write(dir, "views/w/list.html.erb", <<~ERB)

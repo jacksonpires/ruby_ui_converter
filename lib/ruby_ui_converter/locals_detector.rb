@@ -104,6 +104,8 @@ module RubyUIConverter
             end
           end
           collect(node.children, codes)
+        when Nodes::Comment
+          collect(node.children, codes)
         end
       end
     end

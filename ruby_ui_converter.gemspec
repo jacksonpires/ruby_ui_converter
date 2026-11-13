@@ -8,12 +8,13 @@ Gem::Specification.new do |spec|
   spec.authors = ["Jackson Pires"]
   spec.email = ["jackson@linkana.com"]
 
-  spec.summary = "Convert Rails .erb views and partials into RubyUI/Phlex Ruby components."
+  spec.summary = "Convert Rails .erb and .haml views and partials into RubyUI/Phlex Ruby components."
   spec.description = <<~DESC
     ruby_ui_converter walks a Rails views directory recursively and converts each
-    .erb template into an equivalent .rb file written with Phlex (and RubyUI when
-    configured). Traditional Rails partials (_partial.html.erb) are converted into
-    their own Phlex component classes.
+    .erb or .haml template into an equivalent .rb file written with Phlex (and
+    RubyUI when configured). Traditional Rails partials (_partial.html.erb) are
+    converted into their own Phlex component classes. HAML conversion uses the
+    haml gem when it is available (optional dependency).
   DESC
   spec.homepage = "https://github.com/jacksonpires/ruby_ui_converter"
   spec.license = "MIT"
@@ -40,4 +41,6 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "minitest", "~> 5.0"
+  # Optional at runtime: only needed to convert .haml templates (loaded lazily).
+  spec.add_development_dependency "haml", ">= 5.2"
 end
