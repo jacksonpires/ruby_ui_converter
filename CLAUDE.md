@@ -14,6 +14,7 @@ bundle exec rake test                      # run all tests (rake default does th
 bundle exec ruby -Itest test/transformer_test.rb           # run one test file
 bundle exec ruby -Itest test/transformer_test.rb -n test_converts_each_blocks  # run one test by name
 bundle exec exe/ruby_ui_converter convert PATH --dry-run  # try the CLI locally
+script/rails_e2e/run.sh 8.1                # end-to-end: rails new + scaffold + convert + render (needs network)
 ```
 
 Release tasks come from `bundler/gem_tasks` (`rake build`, `rake release`).

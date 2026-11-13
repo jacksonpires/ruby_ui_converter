@@ -58,6 +58,45 @@ gem install ruby_ui_converter
 > `rails new` and a scaffold with every common column type all the way to
 > rendering the converted Phlex/RubyUI components, step by step.
 
+## Compatibility
+
+There are two layers to check: the **converter** (the CLI/library that reads
+`.erb` and writes `.rb`) and the **generated code** (which runs inside your
+Rails app on top of [phlex-rails](https://github.com/phlex-ruby/phlex-rails) and
+[ruby_ui](https://rubygems.org/gems/ruby_ui)).
+
+**Converter** — depends only on `thor`, no Rails needed:
+
+| Ruby | 3.0 | 3.1 | 3.2 | 3.3 | 3.4 | 4.0 |
+| ---- | :-: | :-: | :-: | :-: | :-: | :-: |
+|      | ✅  | ✅  | ✅  | ✅  | ✅  | ✅  |
+
+**Generated code in a Rails app** — phlex-rails 2.x / ruby_ui 1.x require
+Ruby ≥ 3.2 and Rails ≥ 7.1, < 9:
+
+| Rails \ Ruby | 3.2 | 3.3 | 3.4 | 4.0 |
+| ------------ | :-: | :-: | :-: | :-: |
+| **8.1**      | ✅  | ✅  | ✅  | ✅  |
+| **8.0**      | ✅  | ✅  | ✅  | ✅  |
+| **7.2**      | ✅  | ✅  | ✅  | ✅  |
+| **7.1**      | ✅  | ✅  | ✅  | ✅  |
+
+Both matrices run in [CI](.github/workflows/ci.yml): the unit suite on every
+Ruby above (plus `ruby-head`, allowed to fail), and an end-to-end check
+([`script/rails_e2e/run.sh`](script/rails_e2e/run.sh)) for every Rails × Ruby
+cell — it runs `rails new`, scaffolds a resource with every common column type,
+converts its views, renders them through the generated Phlex/RubyUI classes in
+an integration test (index, show, new, edit, validation errors, create).
+Last verified with Ruby 4.0.9, Rails 8.1.4.1, phlex-rails 2.4.0 and
+ruby_ui 1.6.0.
+
+> [!NOTE]
+> Rails 7.1/7.2/8.0 apps created today resolve `json` 3.x and `minitest` 6.x,
+> which those Rails versions themselves don't support (`unknown keyword:
+> quirks_mode` when saving a JSON column; a minitest `ArgumentError` on 7.1).
+> This is unrelated to the converter — pin `gem "json", "< 3"` and
+> `gem "minitest", "< 6"` in such apps (the CI check does the same).
+
 ## CLI usage
 
 ```bash
@@ -480,6 +519,9 @@ semantic equivalence is your responsibility to verify.
 ```bash
 bin/setup        # bundle install
 bundle exec rake test
+
+# end-to-end check against a fresh Rails app (latest patch of the series)
+script/rails_e2e/run.sh 8.1
 ```
 
 ## License
