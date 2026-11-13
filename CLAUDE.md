@@ -64,3 +64,7 @@ Entry points: `RubyUIConverter.convert(path, **opts)` (files) and `RubyUIConvert
 - `haml` is a **development** dependency (gemspec), so HAML tests (`haml_*_test.rb`, parts of `converter_test.rb`/`cli_test.rb`) can rely on it. Without a committed lockfile, CI resolves haml 6 on Ruby 3.0/3.1 and haml 7 on 3.2+, covering both interpolation shapes; to check haml 5.2/6 locally, run the tests under a throwaway Gemfile pinning that version (`BUNDLE_GEMFILE=... bundle exec ruby -Ilib -Itest ...`). Simulate a missing haml with `HamlParser.stub(:require_haml, -> { raise LoadError })` (`minitest/mock`).
 - CLI tests (`cli_test.rb`) must pass `--dry-run` so the prerequisite check never prompts or installs.
 - The E2E script also scaffolds a `Supplier` with haml-rails (`--template-engine=haml`, since tailwindcss-rails registers its own engine) and renders its converted HAML views.
+
+## Knowledge management (OKF)
+
+**OKF is the system of record for everything about this gem.** Knowledge, design decisions, and documentation are captured and kept up to date via OKF (Open Knowledge Format) — use the `okf` skill to record new concepts/decisions, look up what is already known before re-deriving it, and update the bundle whenever code or behavior changes.
