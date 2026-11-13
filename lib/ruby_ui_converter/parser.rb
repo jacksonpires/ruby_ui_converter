@@ -81,7 +81,7 @@ module RubyUIConverter
     def emit_text(text, stack)
       split_parts(text).each do |kind, value|
         if kind == :text
-          append(stack, Nodes::Text.new(content: value)) unless value.empty?
+          append(stack, Nodes::Text.new(content: HtmlEntities.decode(value))) unless value.empty?
         else
           emit_erb(value, stack)
         end
@@ -149,9 +149,15 @@ module RubyUIConverter
         if name.include?("RUCxERBx") && value.nil?
           [:__splat__, split_parts(name)]
         else
-          [name, value.nil? ? nil : split_parts(value)]
+          [name, value.nil? ? nil : decode_text_parts(split_parts(value))]
         end
       end
+    end
+
+    # Literal attribute text is HTML: decode its character references
+    # (`title="Tom &amp; Jerry"`) — Phlex re-escapes attribute values.
+    def decode_text_parts(parts)
+      parts.map { |kind, value| kind == :text ? [kind, HtmlEntities.decode(value)] : [kind, value] }
     end
 
     def split_parts(string)

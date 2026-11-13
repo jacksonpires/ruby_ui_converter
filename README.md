@@ -195,6 +195,7 @@ RubyUIConverter.convert_string("%h1= @title", class_name: "Page", format: :haml)
 | `<%= render "form", user: @user %>`       | `render Views::Users::Form.new(user: @user)`        |
 | `data-id="<%= id %>"`                     | `"data-id": id`                                     |
 | `<%# comment %>`                          | `# comment`                                         |
+| `&copy; 2026&nbsp;&mdash; a &lt;b&gt;`    | `"© 2026\u00A0— a <b>"` (Phlex re-escapes)          |
 
 Top-level views get an initializer built from the controller instance variables
 they reference (`@products` → `def initialize(products: nil); @products = products; end`),
@@ -592,12 +593,14 @@ It covers the common cases well, but it is a heuristic source-to-source tool —
   as blocks but may need manual adjustment for phlex-rails idioms.
 - `render @collection` / object forms are emitted as a bare `render ...` call;
   phlex-rails' `#render` handles model objects and relations.
+- HTML character references in text and literal attribute values are
+  decoded (`&copy;` → `©`, `&#8212;` → `—`) so Phlex doesn't escape them
+  twice; named references cover the HTML 4 set (`&nbsp;`, `&mdash;`,
+  accented letters, arrows, Greek, …) — other names are left as written.
 - Inline `<script>` / `<style>` content is wrapped in a raw call
   (`raw(safe(...))` on Phlex 2, `unsafe_raw(...)` on Phlex 1) with a TODO.
 - Custom elements (e.g. `<my-widget>`) are emitted as method calls and may need
   a Phlex-compatible registration.
-- HTML entities in text (`&nbsp;`, `&copy;`) are currently emitted escaped
-  (`&amp;nbsp;`); replace them with the literal characters.
 - Two templates for the same action (`show.html.erb` + `show.html.haml`, or a
   variant like `show.html+phone.erb`) would generate the same `.rb`: the first
   is converted and the other is reported as an error.

@@ -438,16 +438,24 @@ module RubyUIConverter
       "\"#{escape_inner(string)}\""
     end
 
+    STRING_ESCAPES = {
+      "\\" => "\\\\",
+      "\"" => "\\\"",
+      "\n" => "\\n",
+      "\t" => "\\t",
+      "\r" => "\\r",
+      "\#{" => "\\\#{"
+    }.freeze
+
+    # Invisible / easily-confused characters (no-break and other Unicode
+    # spaces, soft hyphen, zero-width characters, BOM) — typically from a
+    # decoded `&nbsp;` — are written as \u escapes so the generated source
+    # stays readable.
+    INVISIBLE_CHARS = /[ ­ -‏ -  -⁤﻿]/
+
     def escape_inner(string)
-      string.to_s.gsub(/[\\"\n\t\r]|\#\{/) do |match|
-        {
-          "\\" => "\\\\",
-          "\"" => "\\\"",
-          "\n" => "\\n",
-          "\t" => "\\t",
-          "\r" => "\\r",
-          "\#{" => "\\\#{"
-        }[match]
+      string.to_s.gsub(/[\\"\n\t\r]|\#\{|#{INVISIBLE_CHARS}/o) do |match|
+        STRING_ESCAPES.fetch(match) { format("\\u%04X", match.ord) }
       end
     end
   end
