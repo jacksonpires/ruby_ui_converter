@@ -228,6 +228,20 @@ class ConverterTest < Minitest::Test
     end
   end
 
+  def test_reports_templates_that_would_generate_the_same_file_as_a_clash
+    Dir.mktmpdir("ruc") do |dir|
+      write(dir, "app/views/users/show.html.erb", "<p>erb</p>")
+      write(dir, "app/views/users/show.html.haml", "%p haml")
+      config = RubyUIConverter::Configuration.new(force: true)
+
+      results = RubyUIConverter::Converter.new(File.join(dir, "app/views/users"), config: config).run
+
+      assert_equal %i[written error], results.map(&:status)
+      assert_includes results[1].error.message, "show.rb is also generated from show.html.erb"
+      assert_includes File.read(File.join(dir, "app/views/users/show.rb")), %(p { "erb" })
+    end
+  end
+
   def test_reports_a_haml_syntax_error_as_a_per_file_error
     Dir.mktmpdir("ruc") do |dir|
       write(dir, "views/x/bad.html.haml", "%p Hi\n  %span nested under inline content\n")
