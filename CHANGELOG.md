@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- Compatibility matrix in the README and in CI: unit tests on Ruby 3.0–4.0
+  (plus `ruby-head`), and an end-to-end check (`script/rails_e2e/run.sh`) that
+  scaffolds, converts and renders a fresh Rails 7.1/7.2/8.0/8.1 app on
+  Ruby 3.2–4.0.
+
 ## [0.1.0] - 2026-06-14
 
 - Top-level views now get an initializer (or `prop`s with `--literal`) built
