@@ -11,7 +11,9 @@ module RubyUIConverter
   # The result has the same shape the ERB Parser builds for the equivalent ERB
   # (Text/Output/Statement/Control/Element nodes, attribute "parts"), so the
   # whole downstream pipeline — Transformer, ComponentMap, RailsHelpers,
-  # FormBuilder, LocalsDetector — is shared between both formats.
+  # FormBuilder, LocalsDetector — is shared between both formats. HAML text
+  # (which may hold inline HTML) is itself routed through the ERB Parser, with
+  # each `#{}` interpolation turned into an `<%= %>` tag.
   #
   # Verified against haml 5.2, 6.x and 7.x, which share the ParseNode tree
   # shape and the `Haml::Parser.new(options).call(source)` API.
@@ -25,6 +27,11 @@ module RubyUIConverter
     # `Haml::Util.escape_html_safe((x).to_s)`); haml 7 doesn't. Phlex escapes
     # output itself, so the wrapper is stripped back to the original code.
     ESCAPE_WRAPPER = /\A(?:::)?Haml::(?:Helpers\.html_escape|Util\.escape_html_safe|Util\.escape_html)\(\((.*)\)(?:\.to_s)?\)\z/m
+
+    # Filters whose content is HAML/HTML text (interpolated, unescaped HTML).
+    TEXT_FILTERS = %w[plain preserve].freeze
+    # Filters rendered as an element wrapping their raw content.
+    RAW_ELEMENT_FILTERS = { "javascript" => "script", "css" => "style" }.freeze
 
     MISSING_HAML = "converting .haml templates requires the haml gem " \
                    "(add `gem \"haml\"` to your Gemfile or run `gem install haml`)"
@@ -64,14 +71,52 @@ module RubyUIConverter
 
     private
 
+    # Converts sibling HAML nodes, then pads text that sits next to another
+    # rendered sibling: HAML puts a newline between lines, so `Signed in as`
+    # followed by `%strong= name` renders with a space in between.
     def convert_children(nodes, target)
-      nodes.each { |node| convert(node, target) }
+      rendered = nodes.reject { |node| silent?(node) }
+
+      nodes.each do |node|
+        start = target.length
+        convert(node, target)
+        next if silent?(node)
+
+        position = rendered.index { |other| other.equal?(node) }
+        before = position.positive? && !nuke_outer?(rendered[position - 1])
+        after = position < rendered.length - 1 && !nuke_outer?(rendered[position + 1])
+        pad_text(target, start, before: before && !nuke_outer?(node), after: after && !nuke_outer?(node))
+      end
+    end
+
+    # Nodes that render nothing between their siblings.
+    def silent?(node)
+      node.type == :haml_comment || (node.type == :silent_script && node.children.empty?)
+    end
+
+    # `%img>`: whitespace around the tag is removed.
+    def nuke_outer?(node)
+      node.type == :tag && node.value[:nuke_outer_whitespace] ? true : false
+    end
+
+    def pad_text(target, start, before:, after:)
+      return if start >= target.length
+
+      first = target[start]
+      if before && first.is_a?(Nodes::Text) && first.content !~ /\A\s/
+        target[start] = Nodes::Text.new(content: " #{first.content}")
+      end
+
+      last = target[-1]
+      return unless after && last.is_a?(Nodes::Text) && last.content !~ /\s\z/
+
+      target[-1] = Nodes::Text.new(content: "#{last.content} ")
     end
 
     def convert(node, target)
       case node.type
       when :tag then target << element(node)
-      when :plain then target << Nodes::Text.new(content: node.value[:text].to_s)
+      when :plain then target.concat(text_nodes([[:text, node.value[:text].to_s]]))
       when :script then script(node, target)
       when :silent_script then silent_script(node, target)
       when :haml_comment then target << ruby_comment(node.value[:text])
@@ -79,6 +124,16 @@ module RubyUIConverter
       when :doctype then doctype(node, target)
       when :filter then filter(node, target)
       end
+    end
+
+    # HAML text is unescaped HTML with escaped `#{}` interpolations — exactly
+    # what ERB text with `<%= %>` tags is — so it goes through the ERB Parser:
+    # inline markup (`Hi <strong>you</strong>`) becomes real elements, and
+    # interpolated helpers (`#{link_to ...}`) become Output nodes the
+    # RailsHelpers mapping understands.
+    def text_nodes(parts)
+      erb = parts.map { |kind, value| kind == :text ? value : "<%= #{value} %>" }.join
+      Parser.new(erb).parse.children
     end
 
     # --- tags --------------------------------------------------------------
@@ -103,7 +158,7 @@ module RubyUIConverter
       if value[:parse]
         expression(content, value[:escape_html], value[:escape_interpolation], target)
       else
-        target << Nodes::Text.new(content: content.to_s)
+        target.concat(text_nodes([[:text, content.to_s]]))
       end
     end
 
@@ -141,17 +196,20 @@ module RubyUIConverter
     # the matching `end` is implicit (the Transformer emits it).
     def control(node, header, output:)
       control = Nodes::Control.new(block: block_opener?(header), output: output)
-      branch = Nodes::Branch.new(header: header)
-      control.branches << branch
+      segments = [[header, []]]
 
       node.children.each do |child|
         if mid_keyword?(child)
-          branch = Nodes::Branch.new(header: child.value[:text].to_s.strip)
-          control.branches << branch
-          convert_children(child.children, branch.children)
+          segments << [child.value[:text].to_s.strip, child.children.dup]
         else
-          convert(child, branch.children)
+          segments.last[1] << child
         end
+      end
+
+      segments.each do |branch_header, children|
+        branch = Nodes::Branch.new(header: branch_header)
+        convert_children(children, branch.children)
+        control.branches << branch
       end
 
       control
@@ -166,17 +224,15 @@ module RubyUIConverter
     end
 
     # A Ruby expression whose value is output: escaped (`=`, `&=`, `~`), raw
-    # (`!=`), or text with `#{}` interpolation — split into Text + Output
-    # nodes like the ERB `Hello <%= name %>` equivalent, so helpers and locals
-    # inside the interpolation are seen by the rest of the pipeline.
+    # (`!=`), or text with `#{}` interpolation — parsed like the ERB
+    # `Hello <%= name %>` equivalent, so helpers and locals inside the
+    # interpolation are seen by the rest of the pipeline.
     def expression(code, escape_html, escape_interpolation, target)
       code = code.to_s.strip
       parts = interpolated_text_parts(code, escape_html, escape_interpolation)
 
       if parts
-        parts.each do |kind, value|
-          target << (kind == :text ? Nodes::Text.new(content: value) : Nodes::Output.new(code: value))
-        end
+        target.concat(text_nodes(parts))
       else
         target << Nodes::Output.new(code: code, raw: escape_html == false)
       end
@@ -195,18 +251,31 @@ module RubyUIConverter
       parts.map { |kind, value| kind == :code ? [kind, self.class.unwrap_escape(value)] : [kind, value] }
     end
 
+    # Text with HAML `#{}` interpolation (filter content) as text/code parts.
+    def interpolation_parts(text)
+      return [[:text, text]] unless text =~ /#[{@$]/
+
+      RubyLiteral.string_parts(::Haml::Util.unescape_interpolation(text)) || [[:text, text]]
+    end
+
     # --- comments, doctype, filters ----------------------------------------
 
     def ruby_comment(text)
       Nodes::Comment.new(text: text.to_s.strip, html: false)
     end
 
+    # `/ note` -> comment { "note" }; a `/` with nested HAML renders that
+    # content inside the comment (`comment do ... end`). IE conditional
+    # comments (`/[if IE]`) are obsolete and left as a TODO.
     def html_comment(node, target)
       value = node.value
-      if value[:conditional] || node.children.any?
-        target << ruby_comment("TODO: HAML block/conditional comment #{value[:conditional]} not converted".squeeze(" "))
+
+      if value[:conditional]
+        target << ruby_comment("TODO: HAML conditional comment #{value[:conditional]} dropped (content not converted)")
       else
-        target << Nodes::Comment.new(text: value[:text].to_s, html: true)
+        comment = Nodes::Comment.new(text: value[:text].to_s, html: true)
+        convert_children(node.children, comment.children)
+        target << comment
       end
     end
 
@@ -217,8 +286,41 @@ module RubyUIConverter
     end
 
     def filter(node, target)
-      text = node.value[:text].to_s.rstrip
-      target << ruby_comment("TODO: HAML :#{node.value[:name]} filter not converted\n#{text}")
+      name = node.value[:name].to_s
+      text = node.value[:text].to_s
+
+      if RAW_ELEMENT_FILTERS.key?(name)
+        target << raw_element(RAW_ELEMENT_FILTERS[name], text)
+      elsif TEXT_FILTERS.include?(name)
+        target.concat(text_nodes(interpolation_parts(text.rstrip)))
+      elsif name == "escaped"
+        interpolation_parts(text.rstrip).each do |kind, value|
+          target << (kind == :text ? Nodes::Text.new(content: value) : Nodes::Output.new(code: value))
+        end
+      elsif name == "erb"
+        target.concat(Parser.new(text).parse.children)
+      elsif name == "ruby"
+        text.each_line { |line| target << Nodes::Statement.new(code: line.rstrip) unless line.strip.empty? }
+      else
+        target << ruby_comment("TODO: HAML :#{name} filter not converted\n#{text.rstrip}")
+      end
+    end
+
+    # :javascript / :css -> script / style. Content without interpolation is
+    # kept verbatim (RawText, like an ERB <script>); with `#{}` it becomes a
+    # raw interpolated string.
+    def raw_element(tag, text)
+      element = Nodes::Element.new(name: tag)
+      return element if text.strip.empty?
+
+      parts = interpolation_parts(text)
+      element.children <<
+        if parts.any? { |kind, _| kind == :code }
+          Nodes::Output.new(code: ::Haml::Util.unescape_interpolation(text), raw: true)
+        else
+          Nodes::RawText.new(content: text)
+        end
+      element
     end
   end
 end

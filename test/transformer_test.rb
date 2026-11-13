@@ -46,6 +46,13 @@ class TransformerTest < Minitest::Test
     assert_includes convert(%(<p class="<%= foo(a) + b %>">x</p>)), "p(class: (foo(a) + b))"
   end
 
+  def test_keeps_same_line_spaces_between_inline_siblings_and_drops_layout_newlines
+    out = convert(%(<td>\n  <span>a</span> <%= b %>\n</td>\n<p>x</p>), ruby_ui: false)
+
+    assert_includes out, %(span { "a" }\n      whitespace\n      plain(b))
+    refute_match(/whitespace\n\s*p \{/, out)
+  end
+
   def test_converts_if_else_into_ruby_control_flow
     out = convert("<% if a %><p>x</p><% else %><p>y</p><% end %>")
     assert_includes out, "if a"

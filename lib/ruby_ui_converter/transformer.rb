@@ -31,10 +31,10 @@ module RubyUIConverter
     end
 
     def meaningful(nodes)
-      nodes.reject do |node|
-        (node.is_a?(Nodes::Text) && node.content.strip.empty?) ||
+      nodes.each_with_index.reject do |node, index|
+        (node.is_a?(Nodes::Text) && node.content.strip.empty? && !inline_space?(nodes, index)) ||
           (node.is_a?(Nodes::RawText) && node.content.strip.empty?)
-      end
+      end.map(&:first)
     end
 
     def render_attrs(attributes, except: [])
@@ -156,6 +156,7 @@ module RubyUIConverter
       # Collapse runs of whitespace to a single space but keep meaningful
       # leading/trailing spaces so inline text ("Hello, ") stays readable.
       content = node.content.gsub(/\s+/, " ")
+      return builder.line("whitespace") if content == " " # see #inline_space?
       return if content.strip.empty?
 
       builder.line("plain #{ruby_string(content)}")
@@ -228,14 +229,22 @@ module RubyUIConverter
         case node
         when Nodes::Output, Nodes::Statement then acc << node.code
         when Nodes::Control then node.branches.each { |b| collect_codes(b.children, acc) }
-        when Nodes::Element then collect_codes(node.children, acc)
+        when Nodes::Element, Nodes::Comment then collect_codes(node.children, acc)
         end
       end
       acc
     end
 
     def emit_comment(node, builder)
-      if node.html
+      if node.html && meaningful(node.children).any?
+        builder.line("comment do")
+        builder.indent
+        text = node.text.strip
+        builder.line("plain #{ruby_string(text)}") unless text.empty?
+        emit_children(meaningful(node.children), builder)
+        builder.dedent
+        builder.line("end")
+      elsif node.html
         text = node.text.strip
         builder.line("comment { #{ruby_string(text)} }") unless text.empty?
       else
@@ -332,6 +341,15 @@ module RubyUIConverter
 
     def element_method(name)
       name.to_s.downcase
+    end
+
+    # A whitespace-only text node on a single line between two siblings
+    # (`<em>a</em> <%= b %>`) separates inline content and is kept (emitted as
+    # Phlex's `whitespace`); whitespace spanning lines between tags is layout
+    # and is dropped.
+    def inline_space?(nodes, index)
+      content = nodes[index].content
+      !content.empty? && !content.include?("\n") && index.positive? && index < nodes.length - 1
     end
 
     def inlineable?(node)

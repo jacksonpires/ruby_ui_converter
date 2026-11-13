@@ -86,12 +86,16 @@ module RubyUIConverter
       end
     end
 
+    # An HTML comment (html: true) or a template-only comment (html: false).
+    # HTML comments may wrap rendered children (HAML's `/` with nested
+    # content), emitted as `comment do ... end`.
     class Comment < Base
-      attr_reader :text, :html
+      attr_reader :text, :html, :children
 
       def initialize(text:, html: false)
         @text = text
         @html = html
+        @children = []
       end
     end
 
