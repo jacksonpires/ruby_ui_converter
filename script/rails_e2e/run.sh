@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end compatibility check: generate a fresh Rails app, scaffold a
-# resource, convert its ERB views with ruby_ui_converter, wire the controller
+# resource (ERB) plus a second one with haml-rails (HAML), convert their views
+# with ruby_ui_converter, wire the controllers
 # to the generated Phlex/RubyUI classes and run an integration test that
 # renders every converted view.
 #
@@ -59,8 +60,18 @@ bundle install
 # Convert. No TTY on stdin, so the doctor only prints the missing prerequisites.
 bundle exec ruby_ui_converter convert app/views/products --base-class "Views::Base" < /dev/null
 
+# HAML: haml-rails ships scaffold templates for every Rails series checked
+# here. Scaffold a second resource with them (tailwindcss-rails also registers
+# a template engine, so pick haml explicitly) and convert its .haml views.
+bundle add haml-rails
+bin/rails generate scaffold Supplier name:string email:string active:boolean \
+  --template-engine=haml --quiet
+bin/rails db:migrate --quiet
+ls app/views/suppliers/*.haml
+bundle exec ruby_ui_converter convert app/views/suppliers --base-class "Views::Base" < /dev/null
+
 for c in Link Button Input Checkbox Textarea Form Alert NativeSelect; do
-  if grep -rqw "$c" app/views/products/*.rb; then
+  if grep -rqw "$c" app/views/products/*.rb app/views/suppliers/*.rb; then
     bin/rails generate ruby_ui:component "$c"
   fi
 done
