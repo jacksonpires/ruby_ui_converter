@@ -5,6 +5,7 @@ require "strscan"
 
 require_relative "ruby_ui_converter/version"
 require_relative "ruby_ui_converter/nodes"
+require_relative "ruby_ui_converter/html_entities"
 require_relative "ruby_ui_converter/lexer"
 require_relative "ruby_ui_converter/html_tokenizer"
 require_relative "ruby_ui_converter/parser"

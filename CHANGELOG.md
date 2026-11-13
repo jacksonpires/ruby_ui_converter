@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Fix: HTML character references in text and literal attribute values
+  (`&copy;`, `&nbsp;`, `&mdash;`, `&amp;`, `&#8212;`, `&#x2014;`) are now
+  decoded before emitting, instead of being double-escaped by Phlex
+  (`&copy;` used to render as the visible text "&copy;"). Applies to ERB and
+  HAML text; `<script>`/`<style>` content and HAML's `:escaped` filter stay
+  verbatim. Invisible characters such as a decoded `&nbsp;` are written as
+  `\u00A0` escapes in the generated source.
 - **HAML support**: `.haml` views and partials are converted alongside `.erb`
   (`convert app/views` picks up both; `convert_string(..., format: :haml)`).
   A new front-end (`HamlParser`) uses the haml gem's own parser — an
