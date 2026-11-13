@@ -32,7 +32,7 @@ module RubyUIConverter
     end
 
     def run
-      FileWalker.new(@path).erb_files.map { |file| convert_file(file) }
+      FileWalker.new(@path).template_files.map { |file| convert_file(file) }
     end
 
     private

@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 module RubyUIConverter
-  # Represents a single .erb file and knows how to render its .rb equivalent.
+  # Represents a single template file (.erb or .haml) and knows how to render
+  # its .rb equivalent.
   class Template
     attr_reader :path, :root, :config
 
@@ -19,7 +20,12 @@ module RubyUIConverter
       File.basename(path)
     end
 
-    # "index.html.erb" -> "index"; "_form.html.erb" -> "_form"
+    # Source format, from the extension: :erb or :haml.
+    def format
+      RubyUIConverter.format_for(path) || :erb
+    end
+
+    # "index.html.erb" -> "index"; "_form.html.haml" -> "_form"
     def basename
       filename.split(".").first
     end
@@ -67,7 +73,7 @@ module RubyUIConverter
     end
 
     def tree
-      @tree ||= Parser.new(source).parse
+      @tree ||= RubyUIConverter.parse(source, format: format)
     end
 
     def locals

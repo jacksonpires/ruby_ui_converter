@@ -8,11 +8,12 @@ module RubyUIConverter
       true
     end
 
-    desc "convert PATH", "Convert .erb views/partials under PATH into RubyUI/Phlex .rb files"
+    desc "convert PATH", "Convert .erb/.haml views/partials under PATH into RubyUI/Phlex .rb files"
     long_desc <<~DESC
-      Recursively walks PATH looking for *.erb files and writes an equivalent
-      .rb component next to each one (e.g. index.html.erb -> index.rb). Rails
-      partials (_form.html.erb) become their own component classes (form.rb).
+      Recursively walks PATH looking for *.erb and *.haml files and writes an
+      equivalent .rb component next to each one (e.g. index.html.erb ->
+      index.rb). Rails partials (_form.html.haml) become their own component
+      classes (form.rb). Converting .haml requires the haml gem to be loadable.
 
       By default, basic HTML elements are mapped onto RubyUI kit components
       (a -> Link, button -> Button, input -> Input, table -> Table, ...).
@@ -71,7 +72,7 @@ module RubyUIConverter
 
     def report(results, config)
       if results.empty?
-        say "No .erb files found.", :yellow
+        say "No .erb or .haml files found.", :yellow
         return
       end
 
