@@ -1,14 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-11-13
 
-- Fix: HTML character references in text and literal attribute values
-  (`&copy;`, `&nbsp;`, `&mdash;`, `&amp;`, `&#8212;`, `&#x2014;`) are now
-  decoded before emitting, instead of being double-escaped by Phlex
-  (`&copy;` used to render as the visible text "&copy;"). Applies to ERB and
-  HAML text; `<script>`/`<style>` content and HAML's `:escaped` filter stay
-  verbatim. Invisible characters such as a decoded `&nbsp;` are written as
-  `\u00A0` escapes in the generated source.
+### Added
+
 - **HAML support**: `.haml` views and partials are converted alongside `.erb`
   (`convert app/views` picks up both; `convert_string(..., format: :haml)`).
   A new front-end (`HamlParser`) uses the haml gem's own parser — an
@@ -22,22 +17,33 @@
   comments (`/` with nested content → `comment do … end`), doctype and the
   `:javascript`/`:css`/`:plain`/`:escaped`/`:erb`/`:ruby` filters. Without
   the haml gem, the CLI explains once how to add it.
-- The end-to-end check also scaffolds a resource with haml-rails and renders
-  its converted HAML views.
-- Two templates generating the same `.rb` (`show.html.erb` + `show.html.haml`,
-  or a `+variant`) are now reported as an error instead of being skipped or
-  overwritten.
-- Fix: `form_with model: @x do |form|` (unparenthesized) now activates the
-  form-builder mapping (the model capture swallowed `do |form|`).
-- Fix: a same-line space between inline siblings (`<em>a</em> <%= b %>`) is
-  kept as Phlex `whitespace` instead of being dropped.
-- Attribute expressions that are already self-delimited (`[a, b]`, `{...}`,
-  `dom_id(user, :row)`) are no longer wrapped in parentheses.
-
 - Compatibility matrix in the README and in CI: unit tests on Ruby 3.0–4.0
   (plus `ruby-head`), and an end-to-end check (`script/rails_e2e/run.sh`) that
   scaffolds, converts and renders a fresh Rails 7.1/7.2/8.0/8.1 app on
-  Ruby 3.2–4.0.
+  Ruby 3.2–4.0 — including a resource scaffolded with haml-rails, whose
+  converted HAML views are rendered too.
+
+### Changed
+
+- Two templates generating the same `.rb` (`show.html.erb` + `show.html.haml`,
+  or a `+variant`) are now reported as an error instead of being skipped or
+  overwritten.
+- Attribute expressions that are already self-delimited (`[a, b]`, `{...}`,
+  `dom_id(user, :row)`) are no longer wrapped in parentheses.
+
+### Fixed
+
+- HTML character references in text and literal attribute values
+  (`&copy;`, `&nbsp;`, `&mdash;`, `&amp;`, `&#8212;`, `&#x2014;`) are now
+  decoded before emitting, instead of being double-escaped by Phlex
+  (`&copy;` used to render as the visible text "&copy;"). Applies to ERB and
+  HAML text; `<script>`/`<style>` content and HAML's `:escaped` filter stay
+  verbatim. Invisible characters such as a decoded `&nbsp;` are written as
+  ` ` escapes in the generated source.
+- `form_with model: @x do |form|` (unparenthesized) now activates the
+  form-builder mapping (the model capture swallowed `do |form|`).
+- A same-line space between inline siblings (`<em>a</em> <%= b %>`) is kept
+  as Phlex `whitespace` instead of being dropped.
 
 ## [0.1.0] - 2026-06-14
 
