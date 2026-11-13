@@ -45,6 +45,10 @@ bin/rails generate scaffold Product name:string description:text price:decimal \
   published_at:datetime metadata:json category:references --quiet
 bin/rails db:migrate --quiet
 
+# refract 1.1.0 (pulled in by phlex 2.4) references Prism::MissingNode, which
+# prism 2.x removed — the app crashes as soon as it eager loads (production,
+# or tests with CI set). Keep prism on 1.x until refract is fixed.
+printf '\ngem "prism", "< 2"\n' >> Gemfile
 bundle add phlex-rails
 bin/rails generate phlex:install
 bundle add ruby_ui
@@ -64,4 +68,6 @@ done
 ruby "$HERE/patch_app.rb"
 cp "$HERE/converted_views_test.rb" test/integration/
 bin/rails tailwindcss:build
-bin/rails test test/integration/converted_views_test.rb
+# CI=1 turns on eager loading in the test env, so every generated class is
+# loaded (as in production), not only the ones the requests touch.
+CI=1 bin/rails test test/integration/converted_views_test.rb

@@ -97,6 +97,14 @@ ruby_ui 1.6.0.
 > This is unrelated to the converter — pin `gem "json", "< 3"` and
 > `gem "minitest", "< 6"` in such apps (the CI check does the same).
 
+> [!WARNING]
+> On any Rails version: `refract` 1.1.0 (a dependency of phlex 2.4) references
+> `Prism::MissingNode`, which `prism` 2.x removed. Apps that resolve prism 2.x
+> crash with `uninitialized constant Prism::MissingNode` as soon as they eager
+> load (production, or tests with `CI` set) — even in development everything
+> looks fine. Until refract is fixed, add `gem "prism", "< 2"` to your Gemfile.
+> The CI check pins it too and runs with eager loading on.
+
 ## CLI usage
 
 ```bash
