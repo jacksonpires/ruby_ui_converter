@@ -1,18 +1,20 @@
 # ruby_ui_converter
 
-Convert Rails `.erb` views and partials into [Phlex](https://www.phlex.fun) /
-[RubyUI](https://rubyui.com) Ruby components.
+Convert Rails `.erb` and `.haml` views and partials into
+[Phlex](https://www.phlex.fun) / [RubyUI](https://rubyui.com) Ruby components.
 
 Point it at a views directory and it walks recursively, converting each `.erb`
-template into an equivalent `.rb` file **next to it**:
+or `.haml` template into an equivalent `.rb` file **next to it**:
 
 ```
 app/views/users/index.html.erb   ->  app/views/users/index.rb   (Views::Users::Index)
 app/views/users/_user.html.erb   ->  app/views/users/user.rb    (Views::Users::User)
+app/views/posts/show.html.haml   ->  app/views/posts/show.rb    (Views::Posts::Show)
 ```
 
-Traditional Rails partials (`_user.html.erb`) become their own Phlex component
-classes, with detected locals exposed as keyword arguments. Top-level views get
+Traditional Rails partials (`_user.html.erb` / `_user.html.haml`) become their
+own Phlex component classes, with detected locals exposed as keyword
+arguments. Top-level views get
 an initializer for the controller instance variables they reference, so you can
 render them with `render Views::Users::Index.new(users: ...)`.
 
@@ -41,6 +43,13 @@ gem install ruby_ui_converter
 > RubyUI, convert with `--no-ruby-ui` to emit plain Phlex elements — then only
 > [phlex-rails](https://github.com/phlex-ruby/phlex-rails) is required.
 >
+> Converting **`.haml`** templates additionally needs the
+> [haml](https://rubygems.org/gems/haml) gem (5.2+) to be loadable by the
+> converter — it uses haml's own parser. It is an *optional* dependency, not
+> installed with this gem: apps with `.haml` views already have it in their
+> bundle, so run the converter with `bundle exec` inside the app. See
+> [HAML templates](#haml-templates).
+>
 > Likewise, converting with `--literal` makes the generated code depend on the
 > [literal](https://rubygems.org/gems/literal) gem (`bundle add literal` +
 > `extend Literal::Properties` on your base component class — see
@@ -61,7 +70,7 @@ gem install ruby_ui_converter
 ## Compatibility
 
 There are two layers to check: the **converter** (the CLI/library that reads
-`.erb` and writes `.rb`) and the **generated code** (which runs inside your
+`.erb`/`.haml` and writes `.rb`) and the **generated code** (which runs inside your
 Rails app on top of [phlex-rails](https://github.com/phlex-ruby/phlex-rails) and
 [ruby_ui](https://rubygems.org/gems/ruby_ui)).
 
@@ -70,6 +79,10 @@ Rails app on top of [phlex-rails](https://github.com/phlex-ruby/phlex-rails) and
 | Ruby | 3.0 | 3.1 | 3.2 | 3.3 | 3.4 | 4.0 |
 | ---- | :-: | :-: | :-: | :-: | :-: | :-: |
 |      | ✅  | ✅  | ✅  | ✅  | ✅  | ✅  |
+
+`.haml` conversion uses the haml gem found at runtime: **haml 5.2, 6.x and
+7.x** are supported (they share the parser API). haml 7 needs Ruby ≥ 3.2, so
+CI exercises haml 6 on Ruby 3.0/3.1 and haml 7 on Ruby 3.2+.
 
 **Generated code in a Rails app** — phlex-rails 2.x / ruby_ui 1.x require
 Ruby ≥ 3.2 and Rails ≥ 7.1, < 9:
@@ -84,9 +97,11 @@ Ruby ≥ 3.2 and Rails ≥ 7.1, < 9:
 Both matrices run in [CI](.github/workflows/ci.yml): the unit suite on every
 Ruby above (plus `ruby-head`, allowed to fail), and an end-to-end check
 ([`script/rails_e2e/run.sh`](script/rails_e2e/run.sh)) for every Rails × Ruby
-cell — it runs `rails new`, scaffolds a resource with every common column type,
-converts its views, renders them through the generated Phlex/RubyUI classes in
-an integration test (index, show, new, edit, validation errors, create).
+cell — it runs `rails new`, scaffolds a resource with every common column type
+(ERB views) plus a second one with [haml-rails](https://github.com/haml/haml-rails)
+(HAML views), converts both, and renders them through the generated
+Phlex/RubyUI classes in an integration test (index, show, new, edit,
+validation errors, create).
 Last verified with Ruby 4.0.9, Rails 8.1.4.1, phlex-rails 2.4.0 and
 ruby_ui 1.6.0.
 
@@ -108,7 +123,7 @@ ruby_ui 1.6.0.
 ## CLI usage
 
 ```bash
-# Convert a whole folder (recursively), writing .rb next to each .erb
+# Convert a whole folder (recursively), writing .rb next to each .erb/.haml
 bundle exec ruby_ui_converter convert app/views/users
 
 # Preview without writing anything
@@ -156,6 +171,9 @@ RubyUIConverter.convert_string('<h1><%= @title %></h1>', class_name: "Page")
 #     h1 { @title }
 #   end
 # end
+
+# Same for HAML
+RubyUIConverter.convert_string("%h1= @title", class_name: "Page", format: :haml)
 ```
 
 ## What gets converted
@@ -234,6 +252,63 @@ class Components::Base < Phlex::HTML
   # ...
 end
 ```
+
+## HAML templates
+
+`.haml` files are converted alongside `.erb` ones (same CLI, same options,
+same naming: `_user.html.haml` → `Views::Users::User`). Parsing is done by
+the [haml](https://rubygems.org/gems/haml) gem's own parser (5.2, 6.x or 7.x),
+which must be loadable by the converter — run it with `bundle exec` inside an
+app that uses HAML. Without it, `.erb` files still convert and the CLI
+explains once how to add the gem.
+
+The HAML front-end builds the **same intermediate tree** the ERB one does, so
+everything else — RubyUI element mapping, `link_to`/`render` translation,
+form-builder mapping, locals/ivars detection, `--literal` — applies unchanged.
+
+| HAML                                          | Generated Ruby                                              |
+| --------------------------------------------- | ----------------------------------------------------------- |
+| `%p.lead#intro Hello`                         | `p(class: "lead", id: "intro") { "Hello" }`                 |
+| `%p= user.email` / `!= markup`                | `p { user.email }` / `raw(safe(markup))`                    |
+| `%p Hi #{name}`                               | `plain "Hi "` + `plain(name)` (like `Hi <%= name %>`)       |
+| `Go to #{link_to "Docs", docs_path}`          | `plain "Go to "` + `Link(href: docs_path) { "Docs" }`       |
+| `- if a` / `- elsif b` / `- else`             | real `if / elsif / else / end`                              |
+| `- items.each do \|i\|`                       | `items.each do \|i\| … end`                                 |
+| `.card{class: "shadow"}`                      | `Card(class: "card shadow")`                                |
+| `%p.btn{class: "x #{y}"}`                     | `p(class: "btn x #{y}")`                                    |
+| `%p.row{class: [a, b]}`                       | `p(class: ["row", [a, b]])` (Phlex flattens the array)      |
+| `%a{data: {turbo_method: :delete}}`           | `"data-turbo-method": "delete"`                             |
+| `%input{type: "checkbox", checked: false}`    | `Checkbox()` (`false`/`nil` attributes are dropped)         |
+| `%li[@user]`                                  | `li(id: dom_id(@user), class: dom_class(@user))`            |
+| `%div{html_attrs}`                            | `div(**(html_attrs))`                                       |
+| `-# note` / `/ note`                          | `# note` / `comment { "note" }`                             |
+| `/` with nested content                       | `comment do … end`                                          |
+| `:javascript` / `:css`                        | `script` / `style` with raw content (interpolation kept)    |
+| `:plain` / `:escaped` / `:erb` / `:ruby`      | text (as HTML) / escaped text / ERB conversion / statements |
+
+Plain text keeps HAML's semantics: it may contain inline HTML (parsed into
+elements) and its `#{}` interpolations are escaped. HAML puts a line break
+between lines, so a text line next to other content gets a separating space
+(`Signed in as` + `%strong= name` → `plain "Signed in as "` + `strong { name }`),
+except around tags that remove whitespace (`%img>`).
+
+HAML-specific limitations:
+
+- Whitespace is approximated: only text lines get the separating space; two
+  adjacent outputs/tags on separate lines render without one, and `~`/preserve
+  handling is not reproduced.
+- `[@obj]` uses Rails' `dom_id`/`dom_class`: for a new record that gives
+  `new_user`, where HAML gives `user_new`. Include the `DOMID` helper (see
+  [step 3](#3-include-the-rails-helpers-your-views-use)).
+- `{id: [a, b]}`: HAML joins with `_`, Phlex with a space.
+- A class array merged with shorthand classes relies on Phlex flattening
+  nested arrays (verified on Phlex 2).
+- Class-based RubyUI rules (`.card` → `Card`, `.badge` → `Badge`) only match a
+  static class: `.card{class: "x #{y}"}` or `.card[@user]` stays a `div`
+  (same as `<div class="card <%= y %>">` in ERB).
+- IE conditional comments (`/[if IE]`) and filters other than the ones above
+  (`:markdown`, `:scss`, …) are left as `# TODO` comments.
+- Inline HTML that opens on one line and closes on another isn't nested.
 
 ## Migrating a Rails ERB app
 
@@ -497,11 +572,14 @@ Caveats worth reviewing (heuristic, model binding is reconstructed by hand):
 
 ## Design & limitations
 
-The converter is a pure-Ruby pipeline with **no native dependencies**:
+The converter is a pure-Ruby pipeline with **no native dependencies** (only
+`thor` at runtime; the haml gem is used, when present, for `.haml` files). Two
+front-ends build the same AST, which a single Transformer turns into Ruby:
 
 ```
-ERB ─▶ Lexer ─▶ HtmlTokenizer ─▶ Parser ─▶ Transformer ─▶ Ruby/Phlex
-       (tokens)   (html tokens)  (AST)      (CodeBuilder)
+.erb  ─▶ Lexer ─▶ HtmlTokenizer ─▶ Parser ──────┐
+                                                ├─▶ AST ─▶ Transformer ─▶ Ruby/Phlex
+.haml ─▶ Haml::Parser (haml gem) ─▶ HamlParser ─┘           (CodeBuilder)
 ```
 
 It covers the common cases well, but it is a heuristic source-to-source tool —
@@ -518,6 +596,12 @@ It covers the common cases well, but it is a heuristic source-to-source tool —
   (`raw(safe(...))` on Phlex 2, `unsafe_raw(...)` on Phlex 1) with a TODO.
 - Custom elements (e.g. `<my-widget>`) are emitted as method calls and may need
   a Phlex-compatible registration.
+- HTML entities in text (`&nbsp;`, `&copy;`) are currently emitted escaped
+  (`&amp;nbsp;`); replace them with the literal characters.
+- Two templates for the same action (`show.html.erb` + `show.html.haml`, or a
+  variant like `show.html+phone.erb`) would generate the same `.rb`: the first
+  is converted and the other is reported as an error.
+- See also the [HAML-specific limitations](#haml-templates).
 
 Generated files are checked for valid Ruby syntax by the test suite, but
 semantic equivalence is your responsibility to verify.
