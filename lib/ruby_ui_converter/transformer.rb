@@ -276,8 +276,43 @@ module RubyUIConverter
 
     # Expressions with whitespace (`dom_id user`, `a ? b : c`) would parse
     # incorrectly inside the attribute argument list, so wrap them in parens.
+    # Self-delimited expressions (`[a, b]`, `{a: 1}`, `dom_id(user, :x)`) are
+    # safe as-is.
     def bare_expression(code)
-      code =~ /\s/ ? "(#{code})" : code
+      return code unless code =~ /\s/
+
+      self_delimited?(code) ? code : "(#{code})"
+    end
+
+    GROUP_TOKENS = {
+      on_lparen: 1, on_lbracket: 1, on_lbrace: 1,
+      on_rparen: -1, on_rbracket: -1, on_rbrace: -1
+    }.freeze
+    CALL_PREFIX_TOKENS = %i[on_ident on_const on_ivar on_cvar on_gvar on_period].freeze
+
+    # True when the code is a bracketed literal or a parenthesized call
+    # (optionally on a receiver chain written without spaces) whose opening
+    # bracket closes exactly at the end of the code.
+    def self_delimited?(code)
+      tokens = Ripper.lex(code)
+      index = 0
+      while index < tokens.length &&
+            (CALL_PREFIX_TOKENS.include?(tokens[index][1]) ||
+             (tokens[index][1] == :on_op && ["::", "&."].include?(tokens[index][2])))
+        index += 1
+      end
+      return false if index.positive? && !%i[on_ident on_const].include?(tokens[index - 1][1])
+      return false unless tokens[index] && GROUP_TOKENS[tokens[index][1]] == 1
+      return false if index.positive? && tokens[index][1] != :on_lparen
+
+      depth = 0
+      tokens[index..].each_with_index do |token, offset|
+        depth += GROUP_TOKENS.fetch(token[1], 0)
+        return index + offset == tokens.length - 1 if depth.zero?
+      end
+      false
+    rescue StandardError
+      false
     end
 
     def interpolated(parts)

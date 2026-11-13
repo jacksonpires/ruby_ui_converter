@@ -87,7 +87,7 @@ module RubyUIConverter
       value = node.value
       element = Nodes::Element.new(
         name: value[:name],
-        attributes: attributes(value),
+        attributes: HamlAttributes.build(value),
         self_closing: value[:self_closing] ? true : false
       )
       inline_content(value, element.children)
@@ -105,35 +105,6 @@ module RubyUIConverter
       else
         target << Nodes::Text.new(content: content.to_s)
       end
-    end
-
-    # Static attributes (`.a#b`, `(x="y")`, `(disabled)`) become text parts.
-    # Dynamic hashes (`{...}` / html-style with Ruby values) are passed through
-    # as a `**(hash)` splat for now.
-    def attributes(value)
-      attrs = []
-
-      value[:attributes].to_h.each do |name, val|
-        next if val.nil? || val == false
-
-        attrs << [name.to_s, val == true ? nil : [[:text, val.to_s]]]
-      end
-
-      dynamic = value[:dynamic_attributes]
-      [dynamic&.new, dynamic&.old].compact.each do |hash_code|
-        attrs << [:__splat__, [[:erb, output_token(splat_code(hash_code))]]]
-      end
-
-      attrs
-    end
-
-    # "{a: 1}" -> "{a: 1}"; "{html_attrs}" -> "html_attrs" (haml treats the
-    # braces' content as an argument list, so a bare expression is the hash).
-    def splat_code(hash_code)
-      inner = hash_code.to_s.strip.sub(/\A\{/, "").sub(/\}\z/, "").strip
-      args = RailsHelpers.split_args(inner)
-      pairs = args.any? { |arg| arg =~ /\A(\*\*|[\w?!]+:(?!:)|"[^"]*":|'[^']*':)/ || arg.include?("=>") }
-      pairs ? "{#{inner}}" : inner
     end
 
     # --- Ruby --------------------------------------------------------------
@@ -248,10 +219,6 @@ module RubyUIConverter
     def filter(node, target)
       text = node.value[:text].to_s.rstrip
       target << ruby_comment("TODO: HAML :#{node.value[:name]} filter not converted\n#{text}")
-    end
-
-    def output_token(code)
-      Lexer::Token.new(type: :output, value: code, raw: false)
     end
   end
 end
