@@ -22,7 +22,7 @@ sources:
 | Converter | Ruby 3.0–4.0 (+ `ruby-head`, allowed to fail); haml 5.2/6.x/7.x |
 | Generated code | phlex-rails 2.x / ruby_ui 1.x → Ruby ≥ 3.2, Rails ≥ 7.1, < 9 |
 
-haml 7 needs Ruby ≥ 3.2; with no committed lockfile constraint, CI resolves haml 6 on 3.0/3.1 and haml 7 on 3.2+, covering both interpolation shapes the [HAML front-end](/pipeline/haml-front-end.md) handles.[^ci] Last verified with Ruby 4.0.9, Rails 8.1.4.1, phlex-rails 2.4.0, ruby_ui 1.6.0.[^readme-compat]
+haml 7 needs Ruby ≥ 3.2; with no committed lockfile constraint, CI resolves haml 6 on 3.0/3.1 and haml 7 on 3.2+, covering both interpolation shapes the [HAML front-end](/pipeline/haml-front-end.md) handles.[^ci] Last verified with Ruby 4.0.10, Rails 8.1.4.1, phlex-rails 2.4.0, ruby_ui 1.6.0.[^readme-compat]
 
 # Known pins in target apps
 
