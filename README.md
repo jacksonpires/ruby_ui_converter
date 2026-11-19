@@ -102,7 +102,7 @@ cell — it runs `rails new`, scaffolds a resource with every common column type
 (HAML views), converts both, and renders them through the generated
 Phlex/RubyUI classes in an integration test (index, show, new, edit,
 validation errors, create).
-Last verified with Ruby 4.0.9, Rails 8.1.4.1, phlex-rails 2.4.0 and
+Last verified with Ruby 4.0.10, Rails 8.1.4.1, phlex-rails 2.4.0 and
 ruby_ui 1.6.0.
 
 > [!NOTE]
